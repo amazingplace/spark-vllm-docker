@@ -4,9 +4,9 @@
 ARG BUILD_JOBS=16
 
 # =========================================================
-# STAGE 1: Base Image (Installs Dependencies)
+# STAGE 1: Base Build Image
 # =========================================================
-FROM nvcr.io/nvidia/pytorch:26.01-py3 AS base
+FROM nvidia/cuda:13.2.0-devel-ubuntu24.04 AS base
 
 # Build parallemism
 ARG BUILD_JOBS
@@ -35,10 +35,13 @@ ENV VLLM_BASE_DIR=/workspace/vllm
 # Added ccache to enable incremental compilation caching
 RUN apt update && \
     apt install -y --no-install-recommends \
-    curl vim ninja-build git \
+    curl vim cmake build-essential ninja-build \
+    libcudnn9-cuda-13 libcudnn9-dev-cuda-13 \
+    python3-dev python3-pip git wget \
+    libnccl-dev libnccl2 libibverbs1 libibverbs-dev rdma-core \
     ccache \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install uv && pip uninstall -y flash-attn
+    && pip install uv
 
 # Configure Ccache for CUDA/C++
 ENV PATH=/usr/lib/ccache:$PATH
@@ -133,7 +136,8 @@ ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
 WORKDIR $VLLM_BASE_DIR
 
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2"
+     uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130 && \
+     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" triton
 
 # --- VLLM SOURCE CACHE BUSTER ---
 ARG CACHEBUST_VLLM=1
@@ -211,7 +215,7 @@ COPY --from=vllm-builder /workspace/wheels /
 # =========================================================
 # STAGE 6: Runner (Installs wheels from host ./wheels/)
 # =========================================================
-FROM nvcr.io/nvidia/pytorch:26.01-py3 AS runner
+FROM nvidia/cuda:13.2.0-devel-ubuntu24.04 AS runner
 
 # Transferring build settings from build image because of ptxas/jit compilation during vLLM startup
 # Build parallemism
@@ -235,10 +239,12 @@ ENV UV_LINK_MODE=copy
 # Install runtime dependencies
 RUN apt update && \
     apt install -y --no-install-recommends \
-    curl vim git \
+    python3 python3-pip python3-dev vim curl git wget \
+    libcudnn9-cuda-13 \
+    libnccl-dev libnccl2 libibverbs1 libibverbs-dev rdma-core \
     libxcb1 \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install uv && pip uninstall -y flash-attn # triton-kernels pytorch-triton
+    && pip install uv 
 
 # Set final working directory
 WORKDIR $VLLM_BASE_DIR
@@ -249,6 +255,11 @@ RUN mkdir -p tiktoken_encodings && \
     wget -O tiktoken_encodings/cl100k_base.tiktoken "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken"
 
 ARG PRE_TRANSFORMERS=0
+
+# Install dependencies
+RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+     uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130 && \
+     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" triton
 
 # Install wheels from host ./wheels/ (bind-mounted from build context — no layer bloat)
 # With --tf5: override vLLM's transformers<5 constraint to get transformers>=5
@@ -273,7 +284,7 @@ ENV PATH=$VLLM_BASE_DIR:$PATH
 
 # Final extra deps
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    uv pip install ray[default] fastsafetensors nvidia-nvshmem-cu13
+    uv pip install ray[default] fastsafetensors
 
 # Cleanup
 
