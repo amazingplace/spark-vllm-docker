@@ -43,6 +43,11 @@ RUN apt update && \
     && rm -rf /var/lib/apt/lists/* \
     && pip install uv
 
+# Additional deps
+RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
+     uv pip install torch torchvision torchaudio triton --index-url https://download.pytorch.org/whl/nightly/cu130 && \
+     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" filelock pynvml requests tqdm
+
 # Configure Ccache for CUDA/C++
 ENV PATH=/usr/lib/ccache:$PATH
 ENV CCACHE_DIR=/root/.ccache
@@ -75,9 +80,6 @@ ARG FLASHINFER_REF=main
 # --- CACHE BUSTER ---
 # Change this argument to force a re-download of FlashInfer
 ARG CACHEBUST_FLASHINFER=1
-
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2"
 
 # Smart Git Clone (Fetch changes instead of full re-clone)
 RUN --mount=type=cache,id=repo-cache,target=/repo-cache \
@@ -134,10 +136,6 @@ FROM base AS vllm-builder
 ARG TORCH_CUDA_ARCH_LIST="12.1a"
 ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
 WORKDIR $VLLM_BASE_DIR
-
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-     uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130 && \
-     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" triton
 
 # --- VLLM SOURCE CACHE BUSTER ---
 ARG CACHEBUST_VLLM=1
@@ -256,10 +254,10 @@ RUN mkdir -p tiktoken_encodings && \
 
 ARG PRE_TRANSFORMERS=0
 
-# Install dependencies
+# Install deps
 RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-     uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130 && \
-     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" triton
+     uv pip install torch torchvision torchaudio triton --index-url https://download.pytorch.org/whl/nightly/cu130 && \
+     uv pip install nvidia-nvshmem-cu13 "apache-tvm-ffi<0.2" 
 
 # Install wheels from host ./wheels/ (bind-mounted from build context — no layer bloat)
 # With --tf5: override vLLM's transformers<5 constraint to get transformers>=5
