@@ -61,7 +61,7 @@ gpu_arch: ${GPU_ARCH_LIST}
 base_image: ${base_image:-unknown}
 build_args:
   vllm_ref: ${vllm_ref}
-  pre_transformers: ${pre_transformers}
+  transformers_5: ${pre_transformers}
   exp_mxfp4: ${exp_mxfp4}
   vllm_prs: "${vllm_prs}"
   build_jobs: ${BUILD_JOBS}
