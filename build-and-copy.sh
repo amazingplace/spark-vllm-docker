@@ -10,6 +10,7 @@ IMAGE_TAG_SET=false
 REBUILD_FLASHINFER=false
 REBUILD_VLLM=false
 COPY_HOSTS=()
+COPY_TO_FLAG=false
 SSH_USER="$USER"
 NO_BUILD=false
 VLLM_REF="main"
@@ -298,6 +299,7 @@ while [[ "$#" -gt 0 ]]; do
         --rebuild-vllm) REBUILD_VLLM=true ;;
         --vllm-ref) VLLM_REF="$2"; VLLM_REF_SET=true; shift ;;
         -c|--copy-to|--copy-to-host|--copy-to-hosts)
+            COPY_TO_FLAG=true
             shift
             while [[ "$#" -gt 0 && "$1" != -* ]]; do
                 add_copy_hosts "$1"
@@ -367,8 +369,8 @@ if [[ "${FORCE_DISCOVER:-false}" == "true" ]]; then
     load_env_if_exists
 fi
 
-# Handle COPY_HOSTS from .env or autodiscovery if not specified via arguments
-if [ "${#COPY_HOSTS[@]}" -eq 0 ]; then
+# Handle COPY_HOSTS from .env or autodiscovery only if -c was explicitly specified
+if [ "$COPY_TO_FLAG" = true ] && [ "${#COPY_HOSTS[@]}" -eq 0 ]; then
     if [[ -n "$DOTENV_COPY_HOSTS" ]]; then
         echo "Using COPY_HOSTS from .env: $DOTENV_COPY_HOSTS"
         IFS=',' read -ra HOSTS_FROM_ENV <<< "$DOTENV_COPY_HOSTS"
